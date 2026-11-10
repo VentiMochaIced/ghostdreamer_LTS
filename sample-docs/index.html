@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ghostdreamer LTS</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ff8800">
+<style>
+:root {
+  --bg: #1e1e1e;
+  --panel: #2d2d2d;
+  --border: #3c3c3c;
+  --text: #e0e0e0;
+  --muted: #a0a0a0;
+  --accent: #ff8800;
+  --accent2: #ffaa33;
+  --ok: #10b981;
+  --warn: #f59e0b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+header h1 { margin: 0; font-size: 1.1rem; color: var(--accent); }
+.badge { background: var(--accent); color: #fff; font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; margin-left: 8px; }
+.status-gray  { background: #334155; color: #94a3b8; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; }
+.status-green { background: var(--ok); color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; }
+.main {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+  padding: 16px;
+  flex: 1;
+  overflow: hidden;
+}
+@media (max-width: 960px) {
+  .main { grid-template-columns: 1fr; overflow: auto; }
+}
+.viewport {
+  background: #000;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  min-height: 320px;
+}
+canvas { width: 100%; height: 100%; display: block; }
+.overlay {
+  position: absolute;
+  top: 12px; left: 12px;
+  background: rgba(15,23,42,.85);
+  backdrop-filter: blur(8px);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+input, select {
+  width: 100%;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  box-sizing: border-box;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+.row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
+button {
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 4px;
+}
+button.secondary { background: transparent; border: 1px solid var(--border); }
+button.small { width: auto; padding: 4px 8px; font-size: 0.75rem; }
+.history { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; font-size: 0.8rem; }
+.history li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.update-banner {
+  background: var(--accent2);
+  color: #fff;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 0.85rem;
+  display: none;
+}
+.update-banner a { color: #fff; font-weight: bold; }
+</style>
+</head>
+<body>
+<div id="updateBanner" class="update-banner">
+  New version available. <a id="updateLink" href="#" target="_blank">View release</a>
+</div>
+
+<header>
+  <h1>Ghostdreamer <span class="badge" id="verBadge">LTS</span></h1>
+  <div>Status: <span id="status">IDLE / READY</span></div>
+</header>
+
+<div class="main">
+  <div class="viewport">
+    <canvas id="viz"></canvas>
+    <div class="overlay">
+      <div><strong>Source:</strong> <span id="srcLabel">—</span></div>
+      <div><strong>Relay:</strong> <span id="relayLabel">OFF</span></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <!-- Stream config -->
+    <div class="card">
+      <h2>Stream</h2>
+      <label>Source URL (VLC RTMP / HLS / file)</label>
+      <input id="vlc" placeholder="rtmp://127.0.0.1:1935/live/vlc_input">
+      <label>Target / YouTube stream key (optional)</label>
+      <input id="yt" type="password" placeholder="leave blank to keep existing">
+      <label>Theme</label>
+      <select id="theme">
+        <option value="vlc-orange" selected>VLC Orange</option>
+        <option value="dark">Dark</option>
+        <option value="youtube">YouTube</option>
+      </select>
+      <label>Target FPS</label>
+      <input id="fps" type="number" min="5" max="60" value="30">
+      <div class="row">
+        <span>Private</span>
+        <input type="checkbox" id="priv" checked>
+      </div>
+      <div class="row">
+        <span>Relay enabled</span>
+        <input type="checkbox" id="relay">
+      </div>
+      <button onclick="sync()">Sync config</button>
+      <button class="secondary" onclick="startRelay()">Start relay</button>
+      <button class="secondary" onclick="stopRelay()">Stop relay</button>
+    </div>
+
+    <!-- Community manifest nav -->
+    <div class="card" id="communityCard">
+      <h2>Community
+        <span id="portalStatus" class="status-gray">inactive</span>
+      </h2>
+      <label>Manifest URL (GH Pages)</label>
+      <input id="manifestUrl" placeholder="https://ventimochaiced.github.io/ghostdreamer_LTS/manifest.json">
+      <div class="row">
+        <span>Enable community list</span>
+        <input type="checkbox" id="portalToggle">
+      </div>
+      <button type="button" onclick="loadManifest()">Refresh manifest</button>
+      <ul class="history" id="streamList"></ul>
+      <div style="font-size:0.75rem; color:var(--muted); margin-top:8px;">
+        Last update: <span id="manifestStamp">—</span>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <h2>History</h2>
+      <ul class="history" id="hist"></ul>
+      <button class="secondary" onclick="logMetric()">+ Log metric</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('viz');
+const ctx = canvas.getContext('2d');
+let fps = 30, step = 0;
+let currentManifest = [];
+
+function resize() {
+  canvas.width = canvas.parentElement.clientWidth;
+  canvas.height = canvas.parentElement.clientHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function draw() {
+  ctx.fillStyle = '#090d16';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const n = 32, w = canvas.width / n;
+  for (let i = 0; i < n; i++) {
+    const h = (Math.sin(step + i * 0.2) * 0.5 + 0.5) * (canvas.height * 0.6);
+    const g = ctx.createLinearGradient(0, canvas.height, 0, 0);
+    g.addColorStop(0, '#ff8800');
+    g.addColorStop(1, '#10b981');
+    ctx.fillStyle = g;
+    ctx.fillRect(i * w, canvas.height - h, w - 4, h);
+  }
+  step += 0.05;
+  setTimeout(() => requestAnimationFrame(draw), 1000 / fps);
+}
+draw();
+
+function setPortalStatus(active) {
+  const el = document.getElementById('portalStatus');
+  el.textContent = active ? 'active' : 'inactive';
+  el.className = active ? 'status-green' : 'status-gray';
+}
+
+async function loadManifest() {
+  const url = document.getElementById('manifestUrl').value.trim();
+  const enabled = document.getElementById('portalToggle').checked;
+  if (!enabled || !url) {
+    setPortalStatus(false);
+    document.getElementById('streamList').innerHTML = '';
+    document.getElementById('manifestStamp').textContent = '—';
+    return;
+  }
+  try {
+    const res = await fetch(url, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    currentManifest = Array.isArray(data) ? data : [];
+    renderStreamList(currentManifest.filter(s => s.active !== false));
+    setPortalStatus(true);
+    const newest = currentManifest.map(s => s.updated).filter(Boolean).sort().pop();
+    document.getElementById('manifestStamp').textContent = newest || 'unknown';
+  } catch (e) {
+    setPortalStatus(false);
+    document.getElementById('streamList').innerHTML = '<li>Manifest unreachable</li>';
+  }
+}
+
+function renderStreamList(streams) {
+  const list = document.getElementById('streamList');
+  list.innerHTML = '';
+  if (!streams.length) {
+    list.innerHTML = '<li>No active streams</li>';
+    return;
+  }
+  streams.forEach(s => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div>
+        <strong>${s.title || 'Untitled'}</strong><br>
+        <span style="color:var(--muted); font-size:0.75rem;">${s.source || ''} · ${s.url}</span>
+      </div>
+      <button class="small" type="button" onclick="useStream(${JSON.stringify(s.url)})">Use</button>
+    `;
+    list.appendChild(li);
+  });
+}
+
+function useStream(url) {
+  document.getElementById('vlc').value = url;
+  document.getElementById('srcLabel').textContent = url;
+  alert('Source set. Sync then start relay when ready.');
+}
+
+async function sync() {
+  const body = {
+    vlc_stream_url: document.getElementById('vlc').value,
+    youtube_stream_key: document.getElementById('yt').value,
+    theme: document.getElementById('theme').value,
+    target_fps: parseInt(document.getElementById('fps').value) || 30,
+    private_feed_toggle: document.getElementById('priv').checked,
+    relay_enabled: document.getElementById('relay').checked,
+    portal_manifest_url: document.getElementById('manifestUrl').value,
+    portal_enabled: document.getElementById('portalToggle').checked
+  };
+  fps = body.target_fps;
+  const r = await fetch('/api/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (r.ok) {
+    document.getElementById('status').textContent = 'CONFIGURED';
+    document.getElementById('srcLabel').textContent = body.vlc_stream_url || '—';
+    document.getElementById('relayLabel').textContent = body.relay_enabled ? 'ON' : 'OFF';
+  }
+}
+
+async function startRelay() {
+  await fetch('/api/relay/start', { method: 'POST' });
+  document.getElementById('status').textContent = 'RELAY STARTING…';
+  document.getElementById('relayLabel').textContent = 'ON';
+}
+async function stopRelay() {
+  await fetch('/api/relay/stop', { method: 'POST' });
+  document.getElementById('status').textContent = 'RELAY STOPPED';
+  document.getElementById('relayLabel').textContent = 'OFF';
+}
+
+async function logMetric() {
+  const r = await fetch('/api/history/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile: 'Manual', metric: fps + ' FPS', passed: true })
+  });
+  if (r.ok) {
+    const item = await r.json();
+    const li = document.createElement('li');
+    li.innerHTML = `<div><strong>${item.profile}</strong><br><span style="color:var(--muted)">${item.metric}</span></div><div>OK</div>`;
+    document.getElementById('hist').prepend(li);
+  }
+}
+
+async function checkVersion() {
+  try {
+    const res = await fetch('/api/version');
+    const data = await res.json();
+    if (data.update_available) {
+      document.getElementById('updateLink').href = data.release_url;
+      document.getElementById('updateBanner').style.display = 'block';
+    }
+    if (data.current) document.getElementById('verBadge').textContent = data.current;
+  } catch (e) {}
+}
+
+// initial load
+checkVersion();
+loadManifest();
+setInterval(() => {
+  if (document.getElementById('portalToggle').checked) loadManifest();
+}, 60000);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
